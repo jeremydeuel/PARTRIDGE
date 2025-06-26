@@ -1,0 +1,8 @@
+Bootstrap: docker
+From: python:3.13
+
+%post
+  pip install --upgrade pip
+  pip install pandas
+  pip install pysam
+  pip install openpyxl
