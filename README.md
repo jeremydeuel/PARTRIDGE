@@ -54,11 +54,33 @@ Use a 1 min less than the fragmentation time recommended for 350bp fragment leng
 The program is run in several steps
 
 1. Generate bam files
-2. Extract insertions isa_hmmer2.py
+2. Extract insertions
 3. Collect insertions
 4. Gather evidence sequences and paired sequencing mates to identify retrotransposons
 5. Manually annotate novel insertion sites
 6. Measure Source Virus Coverage
+
+## installation
+
+* Use python3.13, https://www.python.org/downloads/release/python-3130/
+* Create virtual environment `python -m venv venv`
+* activate virtual environment `source venv/bin/activate`
+* install required packages `pip install -r env.txt`
+
+
+* install HMMER v3.4 http://hmmer.org
+* run `hmmpress resources/iap.hmm` to "press" the model.
+
+
+* install samtools v1.22 https://www.htslib.org
+
+
+* install R (v4.5.0, https://cran.r-project.org) and R Studio Desktop (v2025.05.0, https://posit.co/download/rstudio-desktop/)
+* install the required packages in R using `install.packages` and `BiocManager::install`.
+```{r}
+install.packages(c("ggplot2","openxlsx","dplyr", "BiocManager"))
+BiocManager::install(c("GenomicRanges","Biostrings","GenomeInfoDb","BiocGenerics"))
+```
 
 ## Step 1: Generate bam files
 
@@ -69,9 +91,9 @@ You need to generate bam files from your sequencing data.
 
 There are plenty of tutorials on the internet indicating how to do this and you can have a look at the file [scripts/make_bams.sh](scripts/make_bams.sh) for an example.
 
-## Step 2: Extract insertions isa_hmmer2.py
+## Step 2: Extract insertions
 ```{bash}
-python peartree/main.py --step discover --bam sample_name.bam --out output_folder/sample_name.txt.gz --threads 6
+python partridge/isa_hmmer2.py [bam] [output] [threads]
 ```
 Requirements (install with pip):
 * see [env.txt](env.txt), use python [venv](https://docs.python.org/3/library/venv.html) to build your environment. I recommend python3.13, although 3.10+ is expected to work.
@@ -157,3 +179,66 @@ We have four 100% hits, covering the entire sequence. Two of these hits are very
 For this step, we only consider viruses manually validated (see step above). Make sure to annotate at least one source virus. If the source virus is not unique, annotate one hit, since it is important to calculate the coverage of the source virus to estimate VAF. The assumption is, that hybridisation capture enrichment has the same efficieny on the source and the destination virus, since both are sequence identical and the binding sequence of the hybridisation probe is thus also identical. Therefore, the ratio of coverage between destination (unknown zygosity / subclonal?) and the source (fixed in the genome and thus homozygous in inbred mouse strains) can be used to infer allelic frequency.
 
 Use the R script `scripts/06_cluster_source_coverage.R`, which I run on the computing cluster. This file will calculate the source locus coverage. This script has to be lightly adapted to your circumstances and you especially have to adapt the list of source viruses you are interested in. It will output an excel file per bam file indicating the coverage per source locus.
+
+# Example using test data
+
+Using the file "test.bam" in the folder "test_data"
+
+## Step 2
+run on a single core
+```
+python partridge/isa_hmmer2.py test_data/test.bam test_data/test_step2.isa.tsv 1
+```
+
+this will generate a file test_step2.isa.tsv with a list of chimeric reads with evidence of an IAP insertion. The estimated run time is less than 1 second on an average laptop.
+
+## Step 3
+run 03_collect_insertions.Rmd in Rstudio. This will generate several files such as isa.audit.xlsx and isa_hmmer2_out.xlsx in test_data.
+
+## Step 4
+
+collect evidence using
+```
+python partridge/collect_evidence.py test
+```
+this will generate a file test_data/test.fa.gz, containing all evidence related to novel insertions. The estimated runtime is less than one second for the test data.
+
+## Step 5
+
+manually validate novel insertions. There is only one in this test data, `chr15:98805467-98805473`. Open test.fa.gz (e.g. `cat test_data/test.fa.gz | gzip -d` or use any text editor capable of viewing such files), then go through the rules
+1.	**A least one supporting read with >20bp of LTR coverage for each end of the LTR is present** -> this is clearly the case, the right clipped sequence is  158bp long `TGTTATTCGACGCGTTCTCACGACCGGCCAGGAAGAACACAACAACCAGAATCTTCTACGGCAAAGCTTTATTGCTTACATCTTTTTGGGGCCAGAGTGTAAGAAGCAAGAGAGCGAGAAGCAAGAGAGAGAAGCAAGAGAGAGAGAGAAACGAAAC` and the left-clipped sequence is 145bp long `CCATGGCCGAGCTGACGTTCACGGGAAAAACAGAGTACAAGTAGTCGTAAATACCCTTGGCACATGCGCAGATTATTTGTTTACCACTTAGAACACAGGATGTCAACGCCATCTTGTGACGGCGAATGTGGGGGCGGCTCCCAAC` 
+2.	**The insertion is not within an obviously repetitive region** -> use a genome browser, for instance https://genome.ucsc.edu/cgi-bin/hgTracks?db=mm39. The location is inside an exon of Lmbr1, which is not a repetitive region. 
+3.	**No reads have discordant starting points of the LTR** -> all reads have concordant starting points
+4.	**There is a TSD of more than two bp and less than 30bp** -> the TSD is 6 bp (difference between both coordinates in the location), `AGGAGG`
+5.	**Both LTR ends map to the same LTR in the reference genome (>93% sequence identity)- and this LTR is part of an LTR pair (2-8kb apart)** -> for this we use UCSC Blat and paste both ends RIGHT_CLIP and LEFT_CLIP immediately after each other. This reveales a 99% sequence identical hit in chr6:31776305-31776668 and chr6:31781207-31781570 which upon close inspection are both ends of an IAPEz immediately downstream of Gm43156.
+
+
+since we now are sure that this is a genuine IAP insertion, open the file test_data/isa.audit.txt and add a new column "classification", then add "TRUE" to that column at the just verified insertion as well as a column "source" and add "chr6:31776305-31781572".
+
+## Step 6
+run `Rscript scripts/06_cluster_source_coverage.R`, this takes about 1 second on a local computer.
+
+This will generate a file `isa.audit.source_coverage.xlsx` containing the coverage of the source virus for this file.
+
+The allelic frequency can now be calculated: The source coverage for `chr6:31776305-31781572` is 287 (file isa.audit.source_coverage), whereas the coverage of the novel insertion is 6 (file isa_hmmer2_out.xlsx), thus the estimated allelic frequency of the novel insertion is 6/287 = 2.1%
+
+
+## License
+
+PEAR-TREE - paired ends of aberrant retrotransposons in phylogenetic trees
+
+Copyright (C) 2025 Jeremy Deuel <jeremy.deuel@usz.ch>
+
+    This program is free software: you can redistribute it and/or modify
+    it under the terms of the GNU General Public License as published by
+    the Free Software Foundation, either version 3 of the License, or
+    (at your option) any later version.
+    
+    This program is distributed in the hope that it will be useful,
+    but WITHOUT ANY WARRANTY; without even the implied warranty of
+    MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+    GNU General Public License for more details.
+    
+    You should have received a copy of the GNU General Public License
+    along with this program.  If not, see <https://www.gnu.org/licenses/>.
+

@@ -3,9 +3,8 @@ library(GenomicRanges)
 library(dplyr)
 library(openxlsx)
 library(Biostrings)
-setwd("~/integration_site/results")
-all_mice <- list.files(pattern="^\\d+\\.bycoords\\.bam$")
-all_mice <-  gsub("\\D","", all_mice) |> as.numeric()
+all_mice <- list.files("test_data",pattern="^\\w+\\.bam$")
+all_mice <-  gsub("\\.bam","", all_mice)
 
 
 #d <- read.xlsx("isa.audit.jd862.xlsx") |> filter(classification) |> filter(!is.na(source))
@@ -13,14 +12,14 @@ all_mice <-  gsub("\\D","", all_mice) |> as.numeric()
 
 
 
-sources <- c('chr3:54756601-54763754','chr3:52137362-52140547','chr13:100725460-100730733','chr3:60397294-60402505','chr11:116280231-116285535','chr4:126902313-126909484','chr11:116676420-116683530','chr18:47781821-47787021','chr2:7408884-7414163','chrX:22430173-22437344','chr1:142512630-142517888','chr6:31776305-31781572','chr4:140934913-140937903','chr11:105919072-105924386','chr16:31966895-31972157','chr3:156505180-156510398','chr2:72100706-72105943','chr17:45955573-45960846','chr3:139825771-139831055','chr6:105007550-105010276','chr10:96028398-96035564','chr2:118385247-118388861','chr7:82915270-82922443','chr18:68545315-68552467','chr10:116442165-116449281','chr8:45895952-45899881','chr13:50885311-50889705','chr1:28495216-28498223','chr4:40054170-40061404','chr18:27131386-27138509','chr6:28924174-28929352','chr1:108336585-108343768','chr7:4458441-4463701','chr17:54122694-54129891','chr10:77786566-77793719','chrX:90860584-90867717','chr3:82388101-82395311','chr14:64700829-64706164','chr12:32078022-32082383','chr10:59217621-59222882','chr8:117729304-117734453','chr5:81525547-81532649','chr5:99959513-99962262','chr13:85747029-85753599','chr10:78652305-78658886','chr6:38253374-38259959','chr1:81541884-81548964','chr2:154196183-154201512')
+sources <- c('chr6:31776305-31781572')
 
 
 get_source_coverage <- function(virus, Expt.ID) {
   regmatches(virus, regexec(r"(^(chr\w+):(\d+)-(\d+)$)",virus))[[1]] -> virus.re
   virus.gr <- GRanges(virus.re[2],IRanges(start=as.numeric(virus.re[3]),end=as.numeric(virus.re[4])))
   if (width(virus.gr)>10000) return(0)
-  r <- strsplit(system(paste0("/rds/project/sjl83/rds-sjl83-green/jd862/mambaforge/envs/samtools/bin/samtools view ",Expt.ID,".bycoords.bam ",virus), intern=T),"\t")
+  r <- strsplit(system(paste0("samtools view test_data/",Expt.ID,".bam ",virus), intern=T),"\t")
 
 
   ref_cigar_len <- sapply(sapply(strsplit(sapply(r,`[[`,6), "(?<=[^0123456789])",perl=T),
@@ -73,8 +72,8 @@ get_source_coverage <- function(virus, Expt.ID) {
 
   return(reads$barcode[subjectHits(findOverlaps(virus.gr, reads, type="within", select="all"))] |> unique() |> length())
 }
-if (file.exists("source.coverage.xlsx")) {
-  d <- read.xlsx("source.coverage.xlsx")
+if (file.exists("test_data/source.coverage.xlsx")) {
+  d <- read.xlsx("test_data/source.coverage.xlsx")
 } else {
   d <- NULL
 }
@@ -90,10 +89,10 @@ for (s in sources) {
     d <- as.data.frame(d)
   })
 
-  write.xlsx(d,"source.coverage.xlsx")
+  write.xlsx(d,"test_data/source.coverage.xlsx")
 }
 
-d <- read.xlsx("isa.audit.jd862.xlsx")
+d <- read.xlsx("test_data/isa.audit.xlsx")
 d$source_coverage <- NA
 
 for (i in seq_len(nrow(d))) {
@@ -120,7 +119,7 @@ for (i in seq_len(nrow(d))) {
       d$source_coverage[i] <- get_source_coverage(virus, d$mouse[i])
     })
   }
- as.data.frame(d) |> openxlsx::write.xlsx("isa.audit.jd862.source_coverage.xlsx")
+ as.data.frame(d) |> openxlsx::write.xlsx("test_data/isa.audit.source_coverage.xlsx")
 }
 
 

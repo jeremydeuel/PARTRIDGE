@@ -9,14 +9,14 @@ import sys, os
 
 args = sys.argv
 
-PATH_TO_AUDIT = '/input_excel.xlsx'
-PATH_TO_OUTPUT = f'/output/{sys.argv[1]}.fa.gz'
+PATH_TO_AUDIT = 'test_data/isa.audit.xlsx'
+PATH_TO_OUTPUT = f'test_data/{sys.argv[1]}.fa.gz'
 d = pd.read_excel(PATH_TO_AUDIT)
 PATH_TO_BAM = None
-for f in os.listdir("/input"):
+for f in os.listdir("test_data"):
     if sys.argv[1] in f:
         if f.endswith(".bam"):
-            PATH_TO_BAM = "/input/"+f
+            PATH_TO_BAM = "test_data/"+f
 if PATH_TO_BAM is None:
     print(f"BAM NOT FOUND for index {sys.argv[1]}")
     exit(1)
@@ -57,7 +57,7 @@ class Breakpoint:
 
 with AlignmentFile(PATH_TO_BAM, mode='rb') as af:
     bps = []
-    for i, (x, strand) in d[d['Index']==sys.argv[1]][['name', "strand"]].iterrows():
+    for i, (x, strand) in d[d['mouse']==sys.argv[1]][['name', "strand"]].iterrows():
         seqname, pos = x.split(":")
         pos = int(pos)
         print(f"Processing {seqname}:{pos}")

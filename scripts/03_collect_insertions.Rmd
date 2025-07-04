@@ -37,6 +37,7 @@ novel_sites <- function(file) {
   for (i in seq_len(nrow(d.agg)-1)) {
       d.agg$group[i] <- group
       if ((d.agg$seqname[i] == d.agg$seqname[i+1]) & (d.agg$breakpoint[i]+150>d.agg$breakpoint[i+1])) {
+        d.agg$group[i+1] <- group
       } else {
         group <- group + 1
       }
@@ -60,19 +61,18 @@ d.agg |> group_by(group) |> summarise(nprimes=length(unique(ltr.end.prime)), ndi
 You might have to adapt the line extracting the experimental ID from your filenames.
 
 ```{r}
-if (file.exists("../data/01_raw_breakpoints.rds")) {
-  d <- readRDS("../data/01_raw_breakpoints.rds")
+if (file.exists("../test_data/01_raw_breakpoints.rds")) {
+  d <- readRDS("../test_data/01_raw_breakpoints.rds")
 } else {
   d <- NULL
-  for (f in list.files("../breakpoints", pattern="\\.isa\\.tsv$", full.names=T)) {
+  for (f in list.files("../test_data", pattern="\\.isa\\.tsv$", full.names=T)) {
     print(f)
     d.file <- novel_sites(f)
-    d.file$Expt.ID <- gsub("\\D","",substr(basename(f),1,3)) |> as.numeric() #adjust this to your naming convention
+    d.file$Expt.ID <- gsub("_step2\\.isa\\.tsv$","",basename(f)) #adjust this to your naming convention
     d <- rbind(d, d.file)
   }
-  saveRDS(d,"../data/01_raw_breakpoints.rds")
+  saveRDS(d,"../test_data/01_raw_breakpoints.rds")
 }
-
 ```
 
 # summarise
@@ -87,17 +87,22 @@ d.all |> group_by(name) |> summarise(n_mice=length(unique(Expt.ID))) |> full_joi
 Generate an Excel Table with your metadata, use "Expt.ID" as the column linking the experimental ID extracted from the filename to other metadata.
 
 ```{r}
-edf <- read.xlsx("metadata.xlsx")
+edf <- read.xlsx("../test_data/metadata.xlsx")
 ```
 # draw raw output and generate is_hmmer2_out file.
 
 ```{r draw_figures}
 ggplot(d.all |> filter(n_mice==1) |> inner_join(edf), aes(x=mouse,y=name,color=log10(n))) + geom_point() + facet_grid(~HNRNPA1, scales="free_x", space="free_x") + theme(axis.text.x = element_text(angle=90, hjust=1, vjust=0.5))
-ggsave("../plots/raw_somatic.pdf",width=12,height=24)
+ggsave("../test_data/raw_somatic.pdf",width=12,height=24)
+if (sum(d.all$n_mice>1)) {
 ggplot(d.all |> filter(n_mice>1) |> inner_join(edf), aes(x=mouse,y=name,color=log10(n))) + geom_point() + facet_grid(~HNRNPA1, scales="free_x", space="free_x") + theme(axis.text.x = element_text(angle=90, hjust=1, vjust=0.5))
-ggsave("../plots/raw_germline.pdf",width=12,height=8)
+ggsave("../test_data/raw_germline.pdf",width=12,height=8)
+}
+openxlsx::write.xlsx(d.all |> inner_join(edf), "../test_data/isa_hmmer2_out.xlsx")
+openxlsx::write.xlsx(d.all |> inner_join(edf) |> group_by(name, seqname, first_bp, strand) |> summarise(nmice=length(unique(Expt.ID)),firstmouse=dplyr::first(Expt.ID)) |> mutate(mouse=ifelse(nmice>1,"multi",as.character(firstmouse))) |> select(name, seqname,strand, first_bp, mouse), "../test_data/isa.audit.xlsx")
 
-openxlsx::write.xlsx(d.all |> inner_join(edf), "isa_hmmer2_out.xlsx")
-openxlsx::write.xlsx(d.all |> inner_join(edf) |> group_by(name, seqname, first_bp, strand) |> summarise(nmice=length(unique(Expt.ID)),firstmouse=dplyr::first(Expt.ID)) |> mutate(mouse=ifelse(nmice>1,"multi",as.character(firstmouse))) |> select(name, seqname,strand, first_bp, mouse), "isa.audit.xlsx")
+```
 
+```{r}
+sessionInfo()
 ```

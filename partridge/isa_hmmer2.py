@@ -488,7 +488,7 @@ chunksize: Number of records to be merged together into a chunk for multiprocess
         # divide threads by number of subthreads
         self.subthreads = 1
         self.threads = max(1, math.floor(self.threads / self.subthreads) - 1)
-        self.hmmfile = "isa_hmmer/resources/iap.hmm"
+        self.hmmfile = "resources/iap.hmm"
         self.chunksize = int(sys.argv[5]) if len(sys.argv) > 5 else 100
         self.chunksleep = 10  # number of seconds to sleep if chunkbuffer is full
         self.chunkbuffer = math.ceil(
